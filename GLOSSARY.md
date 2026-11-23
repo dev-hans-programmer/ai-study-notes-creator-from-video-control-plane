@@ -4,7 +4,7 @@
 **Version:** 1.0  
 **Last updated:** 23 November 2026  
 **Applies to:** Product documents, contracts, repositories, code, telemetry, support, and AI instructions  
-**Related documents:** [PRD.md](./PRD.md), [TRD.md](./TRD.md), [BUILD_PLAYBOOK.md](./BUILD_PLAYBOOK.md), [ROADMAP.md](./ROADMAP.md), [repos.md](./repos.md)
+**Related documents:** [PRD.md](./PRD.md), [TRD.md](./TRD.md), [SERVICE_CATALOG.md](./SERVICE_CATALOG.md), [DATA_OWNERSHIP.md](./DATA_OWNERSHIP.md), [EVENT_CATALOG.md](./EVENT_CATALOG.md), [BUILD_PLAYBOOK.md](./BUILD_PLAYBOOK.md), [ROADMAP.md](./ROADMAP.md), [repos.md](./repos.md)
 
 ---
 
@@ -113,7 +113,31 @@ Authorization decisions should refer to Actor rather than assuming every caller 
 
 ### Account
 
-The product-level identity record and preferences associated with a User. Authentication credentials may be managed by the external OIDC provider; the Account service owns the product profile, preferences, consent, and deletion request state.
+The product-level profile and preference record associated with a User. Account service owns `account_id`, product profile, preferences, consent, and deletion-request state.
+
+An Account is not an Auth Identity and never owns passwords, authenticators, refresh tokens, or signing keys.
+
+### Auth Identity
+
+The Auth-service security principal used to authenticate one User. It has an opaque `identity_id` and owns login identifiers, credential relationships, verification/security state, and Authentication Sessions.
+
+One Auth Identity initially maps to one Account, but their identifiers and lifecycle responsibilities remain distinct.
+
+### Auth Service
+
+The first-party Service that implements the product's OIDC/OAuth authentication boundary. It owns registration, login identifiers, credentials, email verification, access recovery, Authentication Sessions, token issuance/revocation, signing-key metadata, and authentication security audit.
+
+Auth Service proves identity; it does not decide whether the Actor may access a specific Artifact, Note, or other domain resource.
+
+### Login identifier
+
+The normalized identifier used to locate an Auth Identity during authentication, initially an email address. User-facing responses must not reveal whether a Login Identifier already exists.
+
+### Credential
+
+Secret or cryptographic material used to prove control of an Auth Identity, such as a password hash, passkey/WebAuthn public credential, or MFA authenticator.
+
+Plaintext passwords, one-time codes, and raw refresh tokens are never durable Credentials.
 
 ### Authentication
 
@@ -139,7 +163,27 @@ A future shared ownership and collaboration boundary. The initial product is ind
 
 ### Session
 
-The authenticated client interaction state. For web, session secrets live in secure BFF-managed cookies. Desktop/mobile credentials live in approved OS secure storage.
+The authenticated client interaction state. Auth Service owns the Authentication Session and refresh-token family. For web, the BFF exposes only an opaque secure cookie and keeps server-side token material away from browser JavaScript. Desktop/mobile refresh credentials live in approved OS secure storage.
+
+### Access token
+
+A short-lived, audience-bound, Auth-signed credential presented to Edge API. It identifies the Actor/session and approved coarse scopes; it is not proof of resource authorization.
+
+### Refresh token
+
+A high-entropy, one-time rotating credential used only with Auth Service to obtain a new access token. Auth stores a one-way hash, detects reuse, and revokes the affected token family.
+
+### Authentication Session
+
+The Auth-owned record connecting an Identity, client, refresh-token family, security version, creation/expiry, revocation, and bounded device/security metadata.
+
+### Verification challenge
+
+A purpose-bound, single-use, expiring Auth record used to prove control of a Login Identifier. The raw challenge token is not stored.
+
+### Recovery challenge
+
+A purpose-bound, single-use, expiring Auth record used to recover access. Successful recovery revokes affected prior Authentication Sessions under policy.
 
 ### Entitlement
 
@@ -595,11 +639,11 @@ A Service whose capability, deployment, persistence, and failure boundary are in
 
 ### Edge API
 
-The only public backend entry point for desktop/mobile clients and the web BFF. It authenticates, rate-limits, propagates identity, routes or composes bounded requests, exposes public OpenAPI/SSE, and owns no business data.
+The only public **product API** entry point for desktop/mobile clients and the web BFF. It validates Auth-issued access tokens, rate-limits, propagates identity, routes or composes bounded requests, exposes public OpenAPI/SSE, and owns no business data. Auth Service is the separate public authentication-protocol boundary.
 
 ### Backend for Frontend (BFF)
 
-The web-only server boundary inside the Next.js application. It owns the secure browser session and calls Edge API with short-lived access credentials.
+The web-only server boundary inside the Next.js application. It completes first-party Authorization Code + PKCE, owns the browser-facing secure session, keeps refresh material away from browser JavaScript, and calls Edge API with short-lived access tokens.
 
 The BFF is not a general business Service and does not own product data.
 
@@ -1305,6 +1349,7 @@ Use only when the applicable Definition of Done and observation gate pass.
 | JWT | JSON Web Token |
 | KMS | Key Management Service |
 | OIDC | OpenID Connect |
+| OAuth | Open Authorization framework |
 | PII | Personally identifiable information; prefer the broader “personal data” in policy documents |
 | PKCE | Proof Key for Code Exchange |
 | PRD | Product Requirements Document |

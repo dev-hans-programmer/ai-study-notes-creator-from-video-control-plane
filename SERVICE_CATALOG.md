@@ -5,13 +5,13 @@
 **Last updated:** 23 November 2026  
 **Architecture:** Polyrepo backend microservices  
 **Current delivery milestone:** M0 — Product control plane  
-**Related documents:** [PRD.md](./PRD.md), [TRD.md](./TRD.md), [GLOSSARY.md](./GLOSSARY.md), [ROADMAP.md](./ROADMAP.md), [BUILD_PLAYBOOK.md](./BUILD_PLAYBOOK.md), [repos.md](./repos.md)
+**Related documents:** [PRD.md](./PRD.md), [TRD.md](./TRD.md), [GLOSSARY.md](./GLOSSARY.md), [DATA_OWNERSHIP.md](./DATA_OWNERSHIP.md), [EVENT_CATALOG.md](./EVENT_CATALOG.md), [ROADMAP.md](./ROADMAP.md), [BUILD_PLAYBOOK.md](./BUILD_PLAYBOOK.md), [repos.md](./repos.md)
 
 ---
 
 ## 1. Purpose
 
-This document is the authoritative high-level register for the **13 backend Services** planned for Study Notes Creator. It answers, for every Service:
+This document is the authoritative high-level register for the **14 backend Services** planned for Study Notes Creator. It answers, for every Service:
 
 - Why the Service exists.
 - What it owns and explicitly does not own.
@@ -31,8 +31,9 @@ The documents have the following authority:
 | System-wide technical design | `TRD.md` and accepted ADRs |
 | Canonical terminology | `GLOSSARY.md` |
 | Service boundary and accountability | This catalog |
-| Exact durable-data ownership | Planned `DATA_OWNERSHIP.md` |
-| Exact Domain Event envelope and schemas | Planned `EVENT_CATALOG.md` and contracts repository |
+| Exact durable-data ownership | `DATA_OWNERSHIP.md` |
+| Domain Event envelope, facts, producers and consumers | `EVENT_CATALOG.md` |
+| Executable Domain Event schemas | Contracts repository |
 | Exact API and Activity schemas | Contracts repository and owning Service's `SERVICE.md` |
 | Delivery order and activation gate | `ROADMAP.md` |
 
@@ -62,9 +63,9 @@ Every currently unassigned owner is recorded as **TBD before activation**. Servi
 
 ### 2.3 Contract maturity
 
-API capabilities, Activity names, and Domain Event names in this document are **planned boundaries**. They become executable contracts only after review and publication in `study-notes-creator-contracts` or the owning repository, as prescribed by the TRD.
+API capabilities and Activity names in this document are **planned boundaries**. Domain Event entries are candidate facts; `EVENT_CATALOG.md` controls which are planned, deferred, active, deprecated, or retired. All become executable contracts only after review and publication in `study-notes-creator-contracts` or the owning repository, as prescribed by the TRD.
 
-Domain Event names below describe facts that may be published. They are not commands, Job Events, Product Events, or raw logs. The future `EVENT_CATALOG.md` may refine a name or split an event without changing Service ownership.
+Domain Event names below describe facts that may be published. They are not Commands, Job Events, Product Events, or raw logs. `EVENT_CATALOG.md` refines their status, trigger, minimum payload, and consumers without changing Service ownership.
 
 ### 2.4 Dependency meaning
 
@@ -82,7 +83,7 @@ A dependency is a required runtime or platform capability, not permission to acc
 1. Each Service has one repository, one runtime identity, independently deployable units, an owned logical database where required, migrations, CI/CD, dashboards, alerts, and a runbook.
 2. A Service never reads, writes, joins, migrates, or declares a foreign key to another Service's database.
 3. The owning Service enforces resource authorization even when Edge API has authenticated the caller.
-4. Edge API is the only public backend entry point. It owns no business state or domain decisions.
+4. Edge API is the only public product API entry point. Auth Service is the separate public authentication-protocol boundary; neither may absorb another domain's business state.
 5. A synchronous call has a deadline, propagated trace and Actor context, stable errors, bounded retries, and a circuit-breaker policy.
 6. A Domain Event producer commits business state and an outbox record atomically. Delivery is at least once; consumers are idempotent and tolerate delay, duplicates, stale versions, and version gaps.
 7. EventBridge routes Domain Events to a dedicated SQS queue and dead-letter queue for each consumer.
@@ -99,21 +100,22 @@ A dependency is a required runtime or platform capability, not permission to acc
 
 | # | Service | Repository | Mission in one line | Activation | State | Accountable owner |
 |---:|---|---|---|:---:|---|---|
-| 1 | Edge API | `study-notes-creator-edge-api` | Stable public backend boundary for every client | M2 | Planned | TBD before activation |
-| 2 | Account | `study-notes-creator-account-service` | Product identity profile, preferences, consent, and account lifecycle | M2 | Planned | TBD before activation |
-| 3 | Library | `study-notes-creator-library-service` | Authoritative user-owned Artifact catalog and lifecycle | M2 | Planned | TBD before activation |
-| 4 | Ingestion | `study-notes-creator-ingestion-service` | Rights-aware Source validation, upload, acquisition, and source-asset retention | M3 | Planned | TBD before activation |
-| 5 | Workflow | `study-notes-creator-workflow-service` | Durable Generation/deletion orchestration and user-safe Job progress | M2 | Planned | TBD before activation |
-| 6 | Media | `study-notes-creator-media-service` | Isolated validation and preparation of untrusted media | M3 | Planned | TBD before activation |
-| 7 | Transcription | `study-notes-creator-transcription-service` | Authoritative timestamped Transcript Versions | M4 | Planned | TBD before activation |
-| 8 | AI Notes | `study-notes-creator-ai-notes-service` | Evidence-first Note planning, drafting, and quality verification | M5 | Planned | TBD before activation |
-| 9 | Notes | `study-notes-creator-notes-service` | Canonical editable Note documents, versions, Citations, feedback, and shares | M2 | Planned | TBD before activation |
-| 10 | Search | `study-notes-creator-search-service` | Rebuildable user-scoped search projection | M6 | Planned | TBD before activation |
-| 11 | Export | `study-notes-creator-export-service` | Safe asynchronous rendering and expiry of Note exports | M6 | Planned | TBD before activation |
-| 12 | Billing | `study-notes-creator-billing-service` | Entitlements, subscriptions, and auditable usage accounting | M7 | Planned | TBD before activation |
-| 13 | Notification | `study-notes-creator-notification-service` | User notification preferences and multi-channel delivery | M6 | Planned | TBD before activation |
+| 1 | Auth | `study-notes-creator-auth-service` | First-party identity, credentials, verification/recovery, sessions, and token security | M2 | Planned | TBD before activation |
+| 2 | Edge API | `study-notes-creator-edge-api` | Stable public product API boundary for every client | M2 | Planned | TBD before activation |
+| 3 | Account | `study-notes-creator-account-service` | Product profile, preferences, consent, and Account lifecycle | M2 | Planned | TBD before activation |
+| 4 | Library | `study-notes-creator-library-service` | Authoritative user-owned Artifact catalog and lifecycle | M2 | Planned | TBD before activation |
+| 5 | Ingestion | `study-notes-creator-ingestion-service` | Rights-aware Source validation, upload, acquisition, and source-asset retention | M3 | Planned | TBD before activation |
+| 6 | Workflow | `study-notes-creator-workflow-service` | Durable Generation/deletion orchestration and user-safe Job progress | M2 | Planned | TBD before activation |
+| 7 | Media | `study-notes-creator-media-service` | Isolated validation and preparation of untrusted media | M3 | Planned | TBD before activation |
+| 8 | Transcription | `study-notes-creator-transcription-service` | Authoritative timestamped Transcript Versions | M4 | Planned | TBD before activation |
+| 9 | AI Notes | `study-notes-creator-ai-notes-service` | Evidence-first Note planning, drafting, and quality verification | M5 | Planned | TBD before activation |
+| 10 | Notes | `study-notes-creator-notes-service` | Canonical editable Note documents, versions, Citations, feedback, and shares | M2 | Planned | TBD before activation |
+| 11 | Search | `study-notes-creator-search-service` | Rebuildable user-scoped search projection | M6 | Planned | TBD before activation |
+| 12 | Export | `study-notes-creator-export-service` | Safe asynchronous rendering and expiry of Note exports | M6 | Planned | TBD before activation |
+| 13 | Billing | `study-notes-creator-billing-service` | Entitlements, subscriptions, and auditable usage accounting | M7 | Planned | TBD before activation |
+| 14 | Notification | `study-notes-creator-notification-service` | User notification preferences and multi-channel delivery | M6 | Planned | TBD before activation |
 
-No separate authentication Service is planned. Authentication credentials are managed by an approved OIDC provider; Account owns the product profile, and every resource-owning Service owns its authorization decisions.
+Auth owns end-user authentication; Account owns the product Account. Every resource-owning Service still owns its authorization decisions.
 
 ---
 
@@ -121,7 +123,9 @@ No separate authentication Service is planned. Authentication credentials are ma
 
 ```mermaid
 flowchart LR
-    CLIENTS[Web BFF / Electron / React Native] --> EDGE[Edge API]
+    CLIENTS[Web BFF / Electron / React Native] --> AUTH[Auth]
+    CLIENTS --> EDGE[Edge API]
+    EDGE -. JWKS / security checks .-> AUTH
     EDGE --> ACCOUNT[Account]
     EDGE --> LIBRARY[Library]
     EDGE --> INGESTION[Ingestion]
@@ -152,6 +156,9 @@ flowchart LR
     TRANSCRIPTION --> OBJECTS
     AI_NOTES --> OBJECTS
     EXPORT --> OBJECTS
+    AUTH --> AUTH_DB[(Auth database)]
+    AUTH --> AUTH_KEYS[KMS / Secrets]
+    AUTH --> AUTH_EMAIL[Security email delivery]
 ```
 
 The diagram shows allowed interaction styles, not permission for arbitrary calls. Exact consumer relationships must be declared in the event catalog and each Service specification.
@@ -160,11 +167,12 @@ The diagram shows allowed interaction styles, not permission for arbitrary calls
 
 | Service | Service dependencies | Platform/external dependencies |
 |---|---|---|
-| Edge API | Account, Library, Ingestion, Workflow, Transcription, Notes, Search, Export, Billing, Notification | OIDC/JWKS, rate-limit/cache facility, service discovery |
-| Account | No required synchronous domain dependency | OIDC claims, PostgreSQL, EventBridge/SQS |
+| Auth | Account bootstrap/deletion contract | PostgreSQL, KMS/Secrets Manager, WAF/rate-limit cache, transactional email delivery, EventBridge/SQS |
+| Edge API | Auth, Account, Library, Ingestion, Workflow, Transcription, Notes, Search, Export, Billing, Notification | Auth JWKS/private security check, rate-limit/cache facility, service discovery |
+| Account | Auth Identity reference/bootstrap | PostgreSQL, EventBridge/SQS |
 | Library | Workflow/Notes/Transcript facts or owner snapshots for reference reconciliation | PostgreSQL, EventBridge/SQS |
 | Ingestion | Workflow through Activities; no required direct domain write | S3, approved URL/provider adapters, PostgreSQL, Temporal, EventBridge/SQS |
-| Workflow | Activity contracts implemented by Ingestion, Media, Transcription, AI Notes, Notes, Library, Billing, Export | Temporal, PostgreSQL, EventBridge/SQS, stream/cache adapter |
+| Workflow | Activity contracts implemented by Auth, Account, Ingestion, Media, Transcription, AI Notes, Notes, Library, Billing, Export | Temporal, PostgreSQL, EventBridge/SQS, stream/cache adapter |
 | Media | Ingestion-owned immutable source reference | S3, malware scanner, `ffprobe`/FFmpeg sandbox, PostgreSQL, Temporal |
 | Transcription | Ingestion/Media asset reference | Caption/ASR providers, S3, PostgreSQL, Temporal, EventBridge/SQS |
 | AI Notes | Transcription snapshot/reference; Notes materialization contract | Model providers, S3, PostgreSQL, Temporal, EventBridge/SQS |
@@ -172,12 +180,13 @@ The diagram shows allowed interaction styles, not permission for arbitrary calls
 | Search | Library, Notes, and Transcription events/snapshot APIs | PostgreSQL search, EventBridge/SQS |
 | Export | Notes authorized immutable snapshot | S3, sandboxed Markdown/PDF renderer, PostgreSQL, Temporal, EventBridge/SQS |
 | Billing | Account identifier; Workflow through usage Activities | Stripe, PostgreSQL, Temporal, EventBridge/SQS |
-| Notification | User-facing Domain Events; Account identity reference | Email/push providers, PostgreSQL, EventBridge/SQS |
+| Notification | User-facing Domain Events, Account reference, Auth-verified delivery destination | Email/push providers, PostgreSQL, EventBridge/SQS |
 
 ### 5.2 High-level authoritative ownership
 
 | Domain information | Authoritative Service |
 |---|---|
+| Auth Identity, login identifier, credential, verification/recovery challenge, Authentication Session, refresh-token family, signing-key metadata, auth security audit | Auth |
 | Product Account, locale/defaults, consent, account-deletion request | Account |
 | Artifact ownership, title, lifecycle, current Note/Transcript references | Library |
 | Source, upload session, rights attestation, raw/source asset registry and retention | Ingestion |
@@ -191,13 +200,75 @@ The diagram shows allowed interaction styles, not permission for arbitrary calls
 | Plan, subscription, Entitlement, usage reservation/settlement and webhook receipt | Billing |
 | Notification preference, in-app notification, device token and delivery attempt | Notification |
 
-This table is intentionally concise. The planned `DATA_OWNERSHIP.md` will decide individual fields, retention, deletion, backup, classification, and tombstone ownership.
+This table is intentionally concise. `DATA_OWNERSHIP.md` defines the detailed data groups, retention, deletion, backup, classification, copy, and Tombstone rules.
 
 ---
 
 ## 6. Detailed service entries
 
-### 6.1 Edge API
+### 6.1 Auth Service
+
+**Repository:** `study-notes-creator-auth-service`  
+**State / activation:** Planned / M2  
+**Accountable owner:** TBD before activation  
+**Persistence:** Auth PostgreSQL database, KMS/Secrets Manager key material, and approved ephemeral security/rate-limit cache  
+**Criticality:** Public security boundary; compromise affects every authenticated capability
+
+**Mission**
+
+Prove end-user identity and issue/revoke standards-based credentials while keeping passwords, authenticators, recovery, sessions, and signing keys out of Edge, Account, and all product domain Services.
+
+**Responsibilities**
+
+- Own Auth Identity, normalized Login Identifiers, password/passkey/MFA credentials, verification/recovery challenges, and authentication security state.
+- Implement first-party OIDC/OAuth 2.1 Authorization Code + PKCE, discovery, JWKS, hosted registration/sign-in/recovery UI, token exchange, revocation, and logout.
+- Keep the hosted Auth UI minimal, accessible, server-rendered where practical, and security-owned in this repository; it is not another application repository or a place for product-domain logic.
+- Own Authentication Sessions, rotating refresh-token families, reuse detection, access-token claims, key metadata/rotation, and users' session list/revoke controls.
+- Hash passwords with benchmarked Argon2id parameters and KMS/Secrets-backed pepper versions; store only hashes of refresh/challenge tokens.
+- Use mature maintained OAuth/OIDC, JOSE/JWT, WebAuthn, password-hashing, and cryptographic libraries; never invent custom cryptographic primitives or protocol parsing.
+- Bootstrap the linked Account through an idempotent private Account Command and retain only a minimal `account_id` claim projection.
+- Deliver verification/recovery/security messages through a provider adapter while remaining authoritative for challenges and outcomes.
+- Revoke sessions immediately and purge/tombstone Auth-owned data during Account deletion.
+- Defend anonymous endpoints against enumeration, credential stuffing, brute force, recovery abuse, malicious redirects, and token replay.
+
+**Non-goals**
+
+- Owning Account profile/preferences/consent, Artifact/Note authorization, Entitlements, or general product notifications.
+- Sending credentials through Edge or exposing refresh tokens to browser JavaScript.
+- Treating possession of an access token as authorization to a specific domain resource.
+- Delegating identity authority to the email-delivery provider or a third-party hosted identity platform.
+
+**Key boundaries**
+
+- Public capabilities: discovery, JWKS, registration, email verification, sign-in/authorize, token exchange/refresh/revoke, logout, recovery, and session list/revoke.
+- Private capabilities: Account bootstrap/reconciliation, active-session/security-version check for high-risk operations, administrative security controls, and deletion Activities.
+- Candidate events: `IdentityRegistered`, `IdentityStatusChanged`, and `IdentityPurged` remain deferred until `EVENT_CATALOG.md` approves a real asynchronous consumer.
+- Planned Activities: revoke all Sessions, purge/anonymize Auth-owned Identity data, and record a content-free Tombstone during the Deletion Saga.
+
+**Dependencies**
+
+- Synchronous: Account bootstrap/reconciliation; normal token validation uses published JWKS rather than a per-request Auth call.
+- External/platform: PostgreSQL, KMS/Secrets Manager, WAF, Valkey security counters, transactional email delivery, EventBridge/SQS where approved, audit/telemetry.
+
+**Deployment units**
+
+- Public protocol/hosted-UI API, private security/admin API, challenge-email worker, key/session cleanup worker, and outbox/audit publisher. Public and administrative routes use separate ingress/IAM policies.
+
+**Security and failure behavior**
+
+- Access tokens are short-lived and audience-bound; refresh tokens rotate once, remain hashed at rest, and reuse revokes the family.
+- Signing private keys/pepper material are not exportable from KMS/Secrets-backed custody. JWKS rotation overlaps the maximum issued-token validation window.
+- Responses are enumeration-resistant; rate limits combine IP, identifier, client, device, and risk signals without logging secrets.
+- During Auth outage, already issued access tokens may remain usable until their short expiry, but registration/sign-in/refresh/recovery are unavailable. High-risk session checks fail closed.
+- Credential/key compromise triggers a documented emergency rotation, session revocation, user communication, forensics, and recovery procedure.
+
+**Decisions required before activation**
+
+- Identifier/password policy, Argon2id benchmark, token/session/challenge lifetimes, redirect registration, initial MFA/passkey scope, email provider/templates, KMS/JWKS rotation, security-event retention, admin controls, disaster recovery, and independent security-review owner.
+
+---
+
+### 6.2 Edge API
 
 **Repository:** `study-notes-creator-edge-api`  
 **State / activation:** Planned / M2  
@@ -211,7 +282,7 @@ Provide one stable, authenticated, client-friendly public API while hiding inter
 
 **Responsibilities**
 
-- Validate OIDC access tokens, issuer/audience, expiry, scopes, and coarse request limits.
+- Validate Auth-issued access-token signature/key ID, issuer/audience, expiry, session/security version, scopes, and coarse request limits.
 - Propagate Actor, workload, trace, idempotency, and request context to internal APIs.
 - Route or narrowly compose short synchronous calls.
 - Own the public OpenAPI source and stable public error envelope.
@@ -233,8 +304,8 @@ Provide one stable, authenticated, client-friendly public API while hiding inter
 
 **Dependencies**
 
-- Synchronous: all public-facing domain Services listed in section 5.1; never Media or AI Notes directly.
-- External/platform: OIDC/JWKS, internal service discovery, telemetry, and approved rate-limit/cache facility.
+- Synchronous: all public-facing domain Services listed in section 5.1; never Media or AI Notes directly. High-risk security operations may call Auth's private session-status API.
+- External/platform: Auth JWKS, internal service discovery, telemetry, and approved rate-limit/cache facility.
 
 **Deployment units**
 
@@ -248,11 +319,11 @@ Provide one stable, authenticated, client-friendly public API while hiding inter
 
 **Decisions required before activation**
 
-- OIDC provider, public error taxonomy, public API versioning, per-route limits, SSE capacity model, and client/BFF token exchange.
+- JWKS cache/rotation and high-risk session-check policy, public error taxonomy, public API versioning, per-route limits, SSE capacity model, and client/BFF token propagation.
 
 ---
 
-### 6.2 Account Service
+### 6.3 Account Service
 
 **Repository:** `study-notes-creator-account-service`  
 **State / activation:** Planned / M2  
@@ -262,11 +333,11 @@ Provide one stable, authenticated, client-friendly public API while hiding inter
 
 **Mission**
 
-Own the product-level Account associated with an external authenticated identity, including profile, product defaults, consent, and account-lifecycle requests.
+Own the product-level Account associated with a first-party Auth Identity, including profile, product defaults, consent, and account-lifecycle requests.
 
 **Responsibilities**
 
-- Map an approved OIDC subject to one product Account.
+- Idempotently map one Auth `identity_id` to one product Account and return the `account_id` claim binding to Auth.
 - Manage display/profile fields, locale/timezone, product defaults, and consent records.
 - Record account-deletion requests and participate in the Deletion Saga.
 - Provide minimal authorized Account snapshots to approved internal consumers.
@@ -274,7 +345,7 @@ Own the product-level Account associated with an external authenticated identity
 
 **Non-goals**
 
-- Storing passwords, refresh tokens, MFA secrets, or operating an identity provider.
+- Storing passwords, refresh tokens, verification/recovery challenges, authenticators, signing keys, or issuing access tokens.
 - Owning Artifact data, Note content, delivery-channel preferences, subscriptions, or usage ledgers.
 - Deleting another Service's data directly.
 
@@ -286,8 +357,8 @@ Own the product-level Account associated with an external authenticated identity
 
 **Dependencies**
 
-- Synchronous: no mandatory domain dependency.
-- External/platform: verified OIDC claims, PostgreSQL, outbox, EventBridge/SQS, audit/telemetry.
+- Synchronous: Auth Identity/bootstrap context; Workflow for durable Account deletion.
+- External/platform: PostgreSQL, outbox, EventBridge/SQS, audit/telemetry.
 
 **Deployment units**
 
@@ -295,17 +366,17 @@ Own the product-level Account associated with an external authenticated identity
 
 **Security and failure behavior**
 
-- OIDC subject identifiers and personal data are minimized and never placed in broadly consumed events.
-- Loss of OIDC connectivity does not corrupt existing Account state; new identity linkage fails closed.
+- Auth Identity references and personal data are minimized and never placed in broadly consumed events.
+- Auth/Account bootstrap is idempotent and repairable; a partial bootstrap cannot create a second Account or issue normal product scopes.
 - Deletion remains auditable and retryable; a partial Saga never reports the Account as fully purged.
 
 **Decisions required before activation**
 
-- Account bootstrap semantics, merge/link policy, consent versions, recovery window, regional privacy assumptions, and exact split between product defaults and Notification preferences.
+- Auth bootstrap/reconciliation semantics, future identity merge/link policy, consent versions, recovery window, regional privacy assumptions, and exact split between product defaults and Notification preferences.
 
 ---
 
-### 6.3 Library Service
+### 6.4 Library Service
 
 **Repository:** `study-notes-creator-library-service`  
 **State / activation:** Planned / M2  
@@ -360,7 +431,7 @@ Own each user-visible Artifact as the stable catalog entry that connects a Sourc
 
 ---
 
-### 6.4 Ingestion Service
+### 6.5 Ingestion Service
 
 **Repository:** `study-notes-creator-ingestion-service`  
 **State / activation:** Planned / M3  
@@ -413,7 +484,7 @@ Turn an authorized Source locator or upload into a controlled, auditable source 
 
 ---
 
-### 6.5 Workflow Service
+### 6.6 Workflow Service
 
 **Repository:** `study-notes-creator-workflow-service`  
 **State / activation:** Planned / M2  
@@ -449,7 +520,7 @@ Coordinate durable multi-Service business processes while exposing one authorita
 
 **Dependencies**
 
-- Service Activities: Ingestion, Media, Transcription, AI Notes, Notes, Library, Billing, and Export as their milestones activate.
+- Service Activities: Auth and Account for deletion; Ingestion, Media, Transcription, AI Notes, Notes, Library, Billing, and Export as their milestones activate.
 - External/platform: Temporal, PostgreSQL, EventBridge/SQS, SSE stream/cache adapter.
 
 Before Billing activates at M7, Generation does not create a shadow usage ledger; the billing reservation/finalization steps are disabled by milestone configuration.
@@ -470,7 +541,7 @@ Before Billing activates at M7, Generation does not create a shadow usage ledger
 
 ---
 
-### 6.6 Media Service
+### 6.7 Media Service
 
 **Repository:** `study-notes-creator-media-service`  
 **State / activation:** Planned / M3  
@@ -522,7 +593,7 @@ Safely inspect and transform untrusted media into bounded, normalized derivative
 
 ---
 
-### 6.7 Transcription Service
+### 6.8 Transcription Service
 
 **Repository:** `study-notes-creator-transcription-service`  
 **State / activation:** Planned / M4  
@@ -575,7 +646,7 @@ Produce and own immutable, normalized, timestamped Transcript Versions independe
 
 ---
 
-### 6.8 AI Notes Service
+### 6.9 AI Notes Service
 
 **Repository:** `study-notes-creator-ai-notes-service`  
 **State / activation:** Planned / M5  
@@ -629,7 +700,7 @@ Transform a Transcript Version into a structured, evidence-backed Note candidate
 
 ---
 
-### 6.9 Notes Service
+### 6.10 Notes Service
 
 **Repository:** `study-notes-creator-notes-service`  
 **State / activation:** Planned / M2  
@@ -682,7 +753,7 @@ Own the canonical editable Note document and its recoverable history, preserving
 
 ---
 
-### 6.10 Search Service
+### 6.11 Search Service
 
 **Repository:** `study-notes-creator-search-service`  
 **State / activation:** Planned / M6  
@@ -737,7 +808,7 @@ Provide fast, user-scoped discovery across Artifacts, Notes, and Transcripts thr
 
 ---
 
-### 6.11 Export Service
+### 6.12 Export Service
 
 **Repository:** `study-notes-creator-export-service`  
 **State / activation:** Planned / M6  
@@ -789,7 +860,7 @@ Render an authorized immutable Note snapshot into a safe, reproducible, time-lim
 
 ---
 
-### 6.12 Billing Service
+### 6.13 Billing Service
 
 **Repository:** `study-notes-creator-billing-service`  
 **State / activation:** Planned / M7  
@@ -841,7 +912,7 @@ Turn commercial plans and actual product usage into authoritative Entitlements a
 
 ---
 
-### 6.13 Notification Service
+### 6.14 Notification Service
 
 **Repository:** `study-notes-creator-notification-service`  
 **State / activation:** Planned / M6  
@@ -898,13 +969,14 @@ Convert approved user-facing facts into deduplicated in-app, email, desktop, and
 
 ### 7.1 M2 deterministic walking skeleton
 
-1. Web BFF calls Edge with an authenticated Actor and idempotency key.
-2. Edge invokes Library to create an Artifact and Workflow to create a Generation/Job using the approved deterministic fake Source contract.
-3. Workflow starts a durable Workflow and schedules only Activities implemented by Services active in M2.
-4. Notes materializes a deterministic Note Version.
-5. Library sets the Current Note reference.
-6. Workflow records ordered Job Events, publishes the ready fact, and serves replayable progress through Edge SSE.
-7. The web app reads the Artifact and Note through Edge.
+1. The user registers/verifies/signs in through Auth; Auth idempotently bootstraps Account and the web BFF receives a secure session.
+2. Web BFF calls Edge with an Auth-issued short-lived access token, authenticated Actor, and idempotency key.
+3. Edge invokes Library to create an Artifact and Workflow to create a Generation/Job using the approved deterministic fake Source contract.
+4. Workflow starts a durable Workflow and schedules only Activities implemented by Services active in M2.
+5. Notes materializes a deterministic Note Version.
+6. Library sets the Current Note reference.
+7. Workflow records ordered Job Events, publishes the ready fact, and serves replayable progress through Edge SSE.
+8. The web app reads the Artifact and Note through Edge.
 
 The walking skeleton proves distributed ownership, authorization, contracts, durability, retries, traces, deployment, and rollback before real media or AI is introduced.
 
@@ -936,10 +1008,11 @@ Every arrow is a versioned Temporal Activity or approved owner API/reference. It
 ### 7.4 Deletion Saga
 
 1. Account or Library records an authorized deletion request.
-2. Workflow starts the correct Deletion Saga and records its durable ledger.
-3. Each owning Service purges or tombstones only its own data and acknowledges completion idempotently.
-4. Search and Notification remove derived state; delayed events cannot recreate tombstoned content.
-5. Workflow reports completion only after all required owners acknowledge, with backup-expiry limitations recorded by policy.
+2. Auth immediately revokes relevant Authentication Sessions when Account deletion begins.
+3. Workflow starts the correct Deletion Saga and records its durable ledger.
+4. Each owning Service, including Auth and Account where applicable, purges or tombstones only its own data and acknowledges completion idempotently.
+5. Search and Notification remove derived state; delayed events cannot recreate tombstoned content.
+6. Workflow reports completion only after all required owners acknowledge, with backup-expiry limitations recorded by policy.
 
 ---
 
@@ -962,6 +1035,7 @@ Before any Service changes from `Planned` to `Designing`, all items below must b
 
 | Service | Primary owner | Backup/reviewer | Assigned on | Next review |
 |---|---|---|---|---|
+| Auth | TBD | TBD | — | Before M2 activation |
 | Edge API | TBD | TBD | — | Before M2 activation |
 | Account | TBD | TBD | — | Before M2 activation |
 | Library | TBD | TBD | — | Before M2 activation |
@@ -996,10 +1070,10 @@ Adding a Worker, API process, queue consumer, or scheduled task inside an existi
 This catalog intentionally leaves these items open for the remaining M0/M1 governance work:
 
 - Named owners and backups, beginning with all M2 Services.
-- Exact per-field data ownership, retention, deletion, export, backup, and classification.
-- Initial Domain Event envelope, names, versions, payload classifications, and consumers.
+- Approval of the policy-bound retention, privacy, export, and processor decisions recorded in `DATA_OWNERSHIP.md`.
+- Publication of machine-readable schemas and routes for the planned events in `EVENT_CATALOG.md`.
 - Exact public/internal OpenAPI and Temporal Activity schemas.
-- OIDC, Temporal, CI/CD, registry, AWS account/region, secrets, and on-call choices.
+- First-party Auth credential/session/token/key/security decisions, Temporal, CI/CD, registry, AWS account/region, secrets, and on-call choices.
 - Approved YouTube/hosted-video acquisition paths and provider terms.
 - Measured SLOs and cost budgets; no unsupported numeric targets are invented here.
 

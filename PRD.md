@@ -1,7 +1,7 @@
 # Product Requirements Document: Study Notes Creator
 
 **Document status:** Draft for product review  
-**Version:** 0.1  
+**Version:** 0.2  
 **Last updated:** 23 November 2026  
 **Working product name:** Study Notes Creator  
 **Audience:** Product, design, engineering, AI/ML, legal, security, growth, and support  
@@ -158,6 +158,7 @@ These decisions define the recommended starting scope and should be challenged d
 | Area | Decision | Rationale |
 |---|---|---|
 | Account | Allow lightweight exploration, require sign-in before generation | Generation has cost and users need a persistent cross-device library |
+| Identity | Own the end-user authentication stack in a first-party Auth Service | Keeps credentials, sessions, token issuance, recovery, and security policy under product control; requires a higher security and operational bar |
 | Default output | “Detailed” notes with overview, structured sections, examples, definitions, takeaways, and citations | Best matches the core promise without setup burden |
 | Source grounding | Timestamp citations are first-class and visible | Trust and navigation are differentiators |
 | Generation controls | Presets plus a small advanced panel | Avoids prompt engineering while retaining control |
@@ -343,6 +344,9 @@ Priority definitions:
 | ACC-03 | Onboarding explains supported sources, expected output, quotas, and privacy at the point of need. | P0 |
 | ACC-04 | Users can manage profile, language, theme, notification, and privacy preferences. | P1 |
 | ACC-05 | Users can export account data and request account deletion. | P0 |
+| ACC-06 | Users verify their email address before costly processing and receive non-enumerating, expiring access-recovery flows. | P0 |
+| ACC-07 | Users can view and revoke active sessions; the system detects refresh-token reuse and revokes the affected token family. | P0 |
+| ACC-08 | Authentication supports standards-based Authorization Code with PKCE for web, desktop, and mobile clients without exposing passwords to product APIs. | P0 |
 
 ### 9.2 Source ingestion
 
@@ -601,6 +605,7 @@ For medical, legal, financial, safety-critical, or other high-stakes topics:
 - Encrypt data in transit and at rest using appropriate modern controls.
 - Apply least-privilege access and audit sensitive administrative access.
 - Give users clear retention and deletion controls.
+- Keep end-user credentials, verification/recovery challenges, sessions, and token security inside the first-party Auth boundary; never expose password or refresh-token material to product APIs, analytics, or support tools.
 
 ### 13.2 Recommended retention defaults
 
@@ -630,6 +635,7 @@ Product and technical design must address:
 - Malicious, corrupted, or disguised uploads.
 - Prompt injection or adversarial instructions embedded in transcripts or video frames.
 - Attempts to extract other users’ private sources or notes.
+- Account enumeration, credential stuffing, password-reset abuse, session fixation/theft, refresh-token replay, and signing-key compromise.
 - Enumeration of share links.
 - Excessive generation, automated scraping, fraud, and quota evasion.
 - Unsafe or illegal source content.
@@ -770,7 +776,7 @@ Candidates, prioritized by evidence:
 The public MVP includes:
 
 - Responsive web experience.
-- Account, authentication, basic settings, and cross-device cloud library.
+- First-party authentication, Account, basic settings, and cross-device cloud library.
 - Public YouTube link, supported hosted/direct link, and local file upload.
 - Preflight validation and actionable errors.
 - Durable background processing with clear stages, cancellation, retry, and in-app notification.
@@ -825,6 +831,7 @@ The MVP is ready for public use when all of the following are true:
 
 | Risk | Impact | Product mitigation |
 |---|---|---|
+| First-party Auth is compromised or unavailable | Account takeover, total sign-in disruption, and severe trust damage | Dedicated Auth boundary/owner, independently reviewed standards implementation, memory-hard credential storage, rotating/revocable sessions, KMS-backed keys, abuse controls, security communications and recovery drills |
 | Notes sound convincing but contain unsupported claims | Loss of trust and possible harm | Source-first generation, timestamp citations, coverage/grounding checks, low-confidence states, feedback loop |
 | YouTube or host access changes | Core ingestion disruption | Compliant provider strategy, explicit support matrix, graceful errors, upload fallback, avoid dependence on unapproved extraction |
 | Long videos are slow or expensive | Poor UX and unit economics | Preflight estimate, background jobs, tiered depth, plan limits, measured packaging, partial recovery |

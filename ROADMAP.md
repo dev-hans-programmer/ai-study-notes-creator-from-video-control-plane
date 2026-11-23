@@ -8,7 +8,9 @@
 **Technical baseline:** [TRD.md](./TRD.md)  
 **Delivery process:** [BUILD_PLAYBOOK.md](./BUILD_PLAYBOOK.md)  
 **Repository register:** [repos.md](./repos.md)  
-**Service boundaries:** [SERVICE_CATALOG.md](./SERVICE_CATALOG.md)
+**Service boundaries:** [SERVICE_CATALOG.md](./SERVICE_CATALOG.md)  
+**Data ownership:** [DATA_OWNERSHIP.md](./DATA_OWNERSHIP.md)  
+**Domain events:** [EVENT_CATALOG.md](./EVENT_CATALOG.md)
 
 ---
 
@@ -28,7 +30,7 @@ This roadmap is gated by outcomes, not arbitrary dates. Target dates will be add
 
 ## 2. Roadmap principles
 
-1. Do not create all 24 repositories at once.
+1. Do not create all 25 repositories at once.
 2. Build one end-to-end user outcome at a time.
 3. Use deterministic mocks before integrating expensive or uncertain providers.
 4. Approve ownership, contracts, failures, and acceptance criteria before implementation.
@@ -61,16 +63,16 @@ Repository state continues to use the legend in `repos.md`.
 |---|---|---:|---:|:---:|
 | M0 | Product control plane and approved build system | 0; governance repository already exists | 1 | ◐ |
 | M1 | Engineering golden path and platform sandbox | 6 | 7 | ○ |
-| M2 | Distributed web walking skeleton with deterministic fake note | 6 | 13 | ○ |
-| M3 | Real local upload and media preparation | 2 | 15 | ○ |
-| M4 | Real timestamped transcription | 1 | 16 | ○ |
-| M5 | Evidence-grounded AI study notes | 1 | 17 | ○ |
-| M6 | Study-ready web internal alpha | 3 | 20 | ○ |
-| M7 | Operable private beta and monetization | 1 | 21 | ○ |
-| M8 | Public web launch | 0 | 21 | ○ |
-| M9 | Electron desktop release | 1 | 22 | ○ |
-| M10 | React Native mobile release | 2 | 24 | ○ |
-| M11 | Learning and collaboration expansion | 0 initially | 24 | ◇ |
+| M2 | Distributed web walking skeleton with deterministic fake note | 7 | 14 | ○ |
+| M3 | Real local upload and media preparation | 2 | 16 | ○ |
+| M4 | Real timestamped transcription | 1 | 17 | ○ |
+| M5 | Evidence-grounded AI study notes | 1 | 18 | ○ |
+| M6 | Study-ready web internal alpha | 3 | 21 | ○ |
+| M7 | Operable private beta and monetization | 1 | 22 | ○ |
+| M8 | Public web launch | 0 | 22 | ○ |
+| M9 | Electron desktop release | 1 | 23 | ○ |
+| M10 | React Native mobile release | 2 | 25 | ○ |
+| M11 | Learning and collaboration expansion | 0 initially | 25 | ◇ |
 
 The running total includes the current `study-notes-creator` governance repository.
 
@@ -84,11 +86,12 @@ The running total includes the current `study-notes-creator` governance reposito
 | `study-notes-creator-service-template` | M1 | Standard service creation and controls |
 | `study-notes-creator-infrastructure` | M1 | Sandbox, CI/CD, identity, networking, data and messaging primitives |
 | `study-notes-creator-contracts` | M1 | Public/internal API, event and Activity contracts |
-| `study-notes-creator-frontend-foundation` | M1 | Shared domain, API, document, state and token packages |
+| `study-notes-creator-frontend-foundation` | M1 | Shared domain, Auth behavior/ports, API, document, state and design-token packages |
 | `study-notes-creator-web-ui` | M1 | Shared React DOM UI/editor/player foundation |
 | `study-notes-creator-ai-evals` | M1 | Evaluation harness and permissioned benchmark manifests; expanded in M4–M5 |
 | `study-notes-creator-web` | M2 | First user-facing application |
-| `study-notes-creator-edge-api` | M2 | Stable public API and authentication boundary |
+| `study-notes-creator-auth-service` | M2 | First-party identity, credentials, sessions, recovery and token issuance |
+| `study-notes-creator-edge-api` | M2 | Stable public product API and first-party token-validation boundary |
 | `study-notes-creator-account-service` | M2 | Product profile and preferences |
 | `study-notes-creator-library-service` | M2 | Artifact ownership and library state |
 | `study-notes-creator-workflow-service` | M2 | Durable generation workflow and progress |
@@ -126,8 +129,8 @@ Activation means creating the repository with its first approved vertical-slice 
 
 - [x] Create `GLOSSARY.md` with stable product/domain terminology.
 - [x] Create `SERVICE_CATALOG.md` with every service mission, non-goals, owner and dependencies.
-- [ ] Create `DATA_OWNERSHIP.md` mapping each durable datum to one service.
-- [ ] Create `EVENT_CATALOG.md` with the initial event envelope and planned facts.
+- [x] Create `DATA_OWNERSHIP.md` mapping each durable datum to one service.
+- [x] Create `EVENT_CATALOG.md` with the initial event envelope and planned facts.
 - [ ] Create `adr/` and record accepted cross-system decisions.
 - [ ] Create reusable templates for service specifications, feature specifications, ADRs, AI tasks and pull-request handoffs.
 - [ ] Define milestone and feature tracking mechanism.
@@ -143,6 +146,7 @@ Activation means creating the repository with its first approved vertical-slice 
 - [ ] ADR-006: EventBridge/SQS, transactional outbox and idempotent consumers.
 - [ ] ADR-007: Shared frontend package boundaries and private registry.
 - [ ] ADR-008: AWS ECS/Fargate production baseline.
+- [ ] ADR-009: First-party Auth Service, credential/session/token design, and signing-key lifecycle.
 
 ### Decisions required before M1 exits
 
@@ -150,7 +154,7 @@ Activation means creating the repository with its first approved vertical-slice 
 - Private npm/Python/container registry.
 - AWS organization/account/environment strategy.
 - Initial AWS region and data-residency assumption.
-- Managed OIDC provider.
+- First-party Auth credential policy, email-delivery processor, session/token lifetimes, MFA launch scope, Argon2id parameters, KMS/JWKS rotation, and incident-recovery model.
 - Temporal Cloud account/namespace approach.
 - CI/CD platform, secret management and approval policy.
 - Initial engineering owner/on-call model.
@@ -191,6 +195,7 @@ Activation means creating the repository with its first approved vertical-slice 
 - [ ] EventBridge bus, SQS consumer queue and DLQ.
 - [ ] Temporal development and managed staging namespaces.
 - [ ] Secrets, KMS, workload identity and least-privilege IAM baseline.
+- [ ] Auth signing/pepper key isolation, rotation fixture, local email sink, and anonymous-endpoint WAF/rate-limit baseline.
 - [ ] OpenTelemetry logs, metrics and traces with content-redaction tests.
 
 #### Service golden path
@@ -208,7 +213,7 @@ Activation means creating the repository with its first approved vertical-slice 
 - [ ] OpenAPI/event/Activity-schema validation and compatibility pipeline.
 - [ ] Generated TypeScript client and Python contract package.
 - [ ] Private package publication with canary/stable tags.
-- [ ] Shared TypeScript/domain/document/token package builds.
+- [ ] Shared TypeScript/domain/Auth/document/design-token package builds.
 - [ ] React DOM design-system foundation with accessibility checks and Storybook.
 - [ ] Minimal Next.js, Electron and React Native consumer fixtures for package compatibility.
 
@@ -246,6 +251,7 @@ Activation means creating the repository with its first approved vertical-slice 
 ### Repositories activated
 
 - `study-notes-creator-web`
+- `study-notes-creator-auth-service`
 - `study-notes-creator-edge-api`
 - `study-notes-creator-account-service`
 - `study-notes-creator-library-service`
@@ -255,7 +261,7 @@ Activation means creating the repository with its first approved vertical-slice 
 ### End-to-end flow
 
 ```text
-Sign in
+Register/verify/sign in through first-party Auth
 → create profile/library artifact
 → request generation
 → validate internal-alpha access
@@ -268,8 +274,9 @@ Sign in
 
 ### Deliverables
 
-- [ ] OIDC sign-in through the web BFF and Edge API.
-- [ ] Account profile creation.
+- [ ] First-party registration, email verification, access recovery, Authorization Code + PKCE, rotating session/refresh tokens, logout and session revocation.
+- [ ] Web BFF session and Edge validation of Auth-issued short-lived access tokens/JWKS.
+- [ ] Idempotent Auth Identity → Account bootstrap and profile creation.
 - [ ] Artifact creation and library listing.
 - [ ] Versioned public API client consumed by web.
 - [ ] Durable Temporal workflow with deterministic fake stages.
@@ -282,7 +289,8 @@ Sign in
 
 ### Key design work
 
-- Account, Library, Workflow and Notes `SERVICE.md` files.
+- Auth, Account, Library, Workflow and Notes `SERVICE.md` files.
+- Auth credential/session/token state machines, KMS/JWKS rotation, rate-limit/enumeration controls, and incident runbook.
 - Artifact, generation, job-event and note-version state machines.
 - Public API v1 skeleton.
 - Initial event types and Activity contracts.
@@ -592,7 +600,7 @@ Sign in
 ### Deliverables
 
 - [ ] Local packaged React DOM renderer consuming published shared packages.
-- [ ] System-browser OIDC with secure OS credential storage.
+- [ ] System-browser first-party OIDC with secure OS credential storage.
 - [ ] Typed and validated main/preload/renderer IPC.
 - [ ] Native file selection, drag/drop and background-aware upload.
 - [ ] Study workspace, editor, search, export and notifications.
@@ -623,7 +631,7 @@ Sign in
 ### Deliverables
 
 - [ ] Native design system and canonical-document renderer.
-- [ ] System-browser OIDC/PKCE and secure credential storage.
+- [ ] System-browser first-party OIDC/PKCE and secure credential storage.
 - [ ] URL share-sheet capture and local file/document picker.
 - [ ] Background-capable upload within platform limitations.
 - [ ] Push notifications.
@@ -747,6 +755,7 @@ A failed gate does not automatically mean “work harder.” It may require redu
 | Risk | Earliest milestone | Mitigation | Status |
 |---|---|---|:---:|
 | Repository/microservice overhead exceeds available ownership | M1 | Activate just in time; standard template; one vertical slice; automate compatibility | Open |
+| First-party authentication is compromised or becomes unavailable | M1–M2 | Dedicated boundary/owner; security review; memory-hard hashes; rotating tokens; KMS keys; abuse controls; recovery/rotation drills | Open |
 | Architecture is implemented before user value is validated | M2 | Deterministic walking skeleton; early note prototypes and user feedback | Open |
 | Public YouTube URL cannot be processed compliantly | M7 | Compliance gate; official metadata/embed; authorized upload/transcript fallback | Open |
 | Notes are fluent but insufficiently grounded | M5 | Evidence-first pipeline, deterministic citation linkage and release evaluations | Open |
@@ -826,12 +835,12 @@ Complete these in order:
 1. [ ] Review and approve this roadmap.
 2. [x] Create `GLOSSARY.md`.
 3. [x] Create `SERVICE_CATALOG.md`.
-4. [ ] Create `DATA_OWNERSHIP.md`.
-5. [ ] Create `EVENT_CATALOG.md`.
-6. [ ] Create `adr/` and draft ADR-001 through ADR-008.
+4. [x] Create `DATA_OWNERSHIP.md`.
+5. [x] Create `EVENT_CATALOG.md`.
+6. [ ] Create `adr/` and draft ADR-001 through ADR-009.
 7. [ ] Create the service, feature, task and handoff templates described in the playbook.
 8. [ ] Create `features/F-001-deterministic-walking-skeleton/` and specify it fully.
-9. [ ] Resolve the M1 environment, registry, OIDC, Temporal and CI decisions.
+9. [ ] Resolve the M1 environment, registry, first-party Auth security, Temporal and CI decisions.
 10. [ ] Activate `study-notes-creator-service-template` with its first approved task.
 
 No production service repository should be created before actions 1–9 make its ownership and first task clear.
@@ -844,7 +853,7 @@ Use this table as the concise roadmap status page:
 
 | Milestone | Started | Gate approved | Completed | Release/evidence | Owner notes |
 |---|---|---|---|---|---|
-| M0 Product control plane | 23 Nov 2026 | — | — | PRD/TRD/repos/playbook/roadmap/glossary/service catalog | Remaining governance artifacts listed above |
+| M0 Product control plane | 23 Nov 2026 | — | — | PRD/TRD/repos/playbook/roadmap/glossary/service/data/event catalogs | Remaining governance artifacts listed above |
 | M1 Golden path | — | — | — | — | — |
 | M2 Walking skeleton | — | — | — | — | — |
 | M3 Local upload/media | — | — | — | — | — |

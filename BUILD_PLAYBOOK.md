@@ -124,7 +124,7 @@ Automation is a gate, not a substitute for design or human review.
 10. **No secret knowledge.** Important context is written in the repository rather than retained only in a conversation.
 11. **Production is never the first integration environment.** Changes progress through local, preview/integration, staging, then production.
 12. **Failure behavior is designed.** Timeouts, retries, idempotency, compensation, and rollback are specified before release.
-13. **Do not activate all 24 repositories at once.** A repository is created when an approved vertical slice first needs its capability.
+13. **Do not activate all 25 repositories at once.** A repository is created when an approved vertical slice first needs its capability.
 
 ---
 
@@ -780,7 +780,7 @@ Required tests depend on the change:
 | Integration | Database, S3, queue, provider adapter, Temporal Activity | Owning service |
 | Workflow | Retry, timeout, crash, cancellation, compensation, replay | Workflow and capability services |
 | End-to-end | User outcome through published/deployed artifacts | Application/platform suite |
-| Security | Authz, tenant isolation, SSRF, XSS, secrets, malicious media | Relevant service/application |
+| Security | First-party authentication, credentials/tokens/key rotation, authz, tenant isolation, SSRF, XSS, secrets, malicious media | Relevant service/application |
 | Performance | Load, latency, file size, queue recovery, editor scale | Risk-owning repository |
 | AI evaluation | Grounding, coverage, citations, language, cost, regressions | AI evaluation repository |
 
@@ -832,6 +832,8 @@ Every review asks:
 - How is access revoked and data deleted?
 - What happens if input is malicious?
 - What is the least privilege required?
+
+First-party Auth changes additionally require independent review of credential hashing, identifier normalization/enumeration, challenge expiry/single use, refresh-token rotation/reuse, session revocation, OAuth/OIDC/PKCE correctness, redirect registration, signing-key custody/rotation, rate limits, recovery abuse, audit, and incident response. AI-generated authentication code is never merged on self-review alone.
 
 ---
 
@@ -1017,7 +1019,7 @@ Create only what is needed to prove the development system:
 
 Deliver:
 
-> Sign in → create an empty artifact → start a durable fake generation → receive progress → materialize a deterministic fake note → display it on web.
+> Register/verify/sign in through first-party Auth → create an empty artifact → start a durable fake generation → receive progress → materialize a deterministic fake note → display it on web.
 
 Use real contracts, authentication, service databases, Temporal, events, job progress, note persistence, telemetry, and deployment. Use deterministic fake media/transcription/AI outputs.
 
@@ -1029,6 +1031,7 @@ Likely repositories activated:
 - Infrastructure
 - Service template
 - Web
+- Auth
 - Edge API
 - Account
 - Library
@@ -1178,6 +1181,7 @@ released_at: "YYYY-MM-DDTHH:MM:SSZ"
 applications:
   web: "1.0.0"
 services:
+  auth-service: "1.0.0"
   edge-api: "1.0.0"
   account-service: "1.0.0"
 contracts:
@@ -1192,6 +1196,7 @@ ai:
   model-routing: "routing-v1"
 infrastructure: "git-sha-or-version"
 database_migrations:
+  auth-service: "revision-id"
   account-service: "revision-id"
 feature_flags:
   local-upload: true

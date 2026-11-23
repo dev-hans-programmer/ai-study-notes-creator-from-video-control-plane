@@ -1,14 +1,14 @@
 # Technical Requirements Document: Study Notes Creator
 
 **Document status:** Proposed implementation baseline  
-**Version:** 0.2  
+**Version:** 0.3  
 **Last updated:** 23 November 2026  
 **Product requirements:** [PRD.md](./PRD.md)  
 **Primary delivery order:** Web, then desktop, then mobile  
 **Architecture style:** Polyrepo clients and backend microservices  
 **Audience:** Engineering, AI/ML, security, product, design, SRE, and QA
 
-**Revision note:** Version 0.2 replaces the earlier single-repository/modular-backend plan with independent client repositories, published frontend packages, and database-per-service backend microservices.
+**Revision note:** Version 0.3 adds a first-party Auth Service that owns end-user identity, credentials, verification/recovery, sessions, token issuance/revocation, and signing-key lifecycle. It replaces the managed identity-provider dependency while preserving standards-based OIDC/OAuth flows.
 
 ---
 
@@ -31,7 +31,7 @@ Python is preferred over Node/Express for backend services because the backend�
 ### 2.1 In scope for the web MVP
 
 - Responsive public and authenticated web application.
-- Managed authentication and account lifecycle.
+- First-party authentication and separate product Account lifecycle.
 - Local video upload using direct, resumable object-storage upload.
 - Approved hosted-video URLs.
 - YouTube metadata and embedded playback, with generation only through a rights-compliant source path.
@@ -123,7 +123,7 @@ The architecture scales horizontally beyond this envelope. The limits must remai
 | Search | Search service with its own PostgreSQL full-text projection and GIN indexes | Event-driven read model without cross-service database queries |
 | Contracts | OpenAPI 3.1, AsyncAPI/JSON Schema, and a dedicated contracts repository | Versioned public/internal APIs, events, generated clients, and compatibility gates |
 | Shared frontend code | Private npm packages published from independent repositories | Maximum safe reuse without coupling application releases |
-| Authentication | Managed OIDC provider using Authorization Code + PKCE | Standards-based web, desktop, and mobile authentication |
+| Authentication | First-party Python/FastAPI Auth Service implementing standards-based OIDC/OAuth 2.1 Authorization Code + PKCE | Product-owned credentials, sessions, recovery, token policy, revocation, and consistent web/desktop/mobile authentication |
 | Billing | Stripe Billing and webhooks | Individual subscription and usage-ledger integration |
 | Infrastructure | AWS ECS/Fargate, RDS, S3, ElastiCache, CloudFront, WAF; Terraform | Managed primitives without Kubernetes overhead |
 | Telemetry | OpenTelemetry plus managed logs/metrics/traces | Cross-service correlation and vendor portability |
@@ -192,12 +192,15 @@ flowchart LR
 
     U[User] --> CF[CloudFront + WAF]
     CF --> WEB
+    WEB --> AUTH[First-party Auth service]
+    DESKTOP --> AUTH
+    MOBILE --> AUTH
     WEB --> EDGE[Public Edge API]
     DESKTOP --> EDGE
     MOBILE --> EDGE
     U -->|presigned multipart upload| S3Q[S3 quarantine]
 
-    subgraph Domain_services[Backend microservices on ECS]
+    subgraph Domain_services[Product domain microservices on ECS]
         ACCOUNT[Account service]
         LIBRARY[Library service]
         INGEST[Ingestion service]
@@ -212,6 +215,7 @@ flowchart LR
         NOTIFY[Notification service]
     end
 
+    EDGE -. token keys / security checks .-> AUTH
     EDGE --> ACCOUNT
     EDGE --> LIBRARY
     EDGE --> INGEST
@@ -242,10 +246,12 @@ flowchart LR
     BUS --> QUEUES[SQS consumer queues + DLQs]
     QUEUES -. domain events .-> Domain_services
     Domain_services --> DBS[(Database per service)]
+    AUTH --> DBS
 
-    EDGE --> AUTH[OIDC provider]
+    AUTH --> EMAIL[Transactional email provider]
+    AUTH --> KMS[KMS signing/pepper keys]
     BILLING --> STRIPE[Stripe]
-    NOTIFY --> EMAIL[Email/push providers]
+    NOTIFY --> DELIVERY[Email/push providers]
 ```
 
 ### 5.1 Component responsibilities
@@ -254,15 +260,25 @@ flowchart LR
 
 - Render marketing, authentication, library, settings, and study-workspace routes.
 - Hold the browser session in secure, HttpOnly, SameSite cookies.
-- Exchange the session for a short-lived API access token server-side.
+- Complete Authorization Code + PKCE against the first-party Auth Service and exchange the BFF session for a short-lived API access token server-side.
 - Proxy authenticated browser API and event-stream calls; never expose refresh tokens to browser JavaScript.
 - Serve responsive UI, upload orchestration, player, editor, and local unsaved-draft recovery.
 - Direct upload bytes to S3 rather than through Next.js.
 
+#### First-party Auth Service
+
+- Is the public security-protocol boundary for registration, sign-in, email verification, access recovery, Authorization Code + PKCE, token rotation/revocation, logout, JWKS, and session management.
+- Serves a minimal accessible, security-owned registration/sign-in/recovery UI from the Auth repository; prefer server-rendered HTML and minimal JavaScript, reuse approved design-token artifacts, and do not create a separate Auth-UI repository.
+- Owns end-user Identity, password/passkey/MFA credentials, verification/recovery challenges, Authentication Sessions, refresh-token families, signing-key metadata, and authentication security audit records.
+- Issues short-lived audience-bound access tokens; stores only one-way hashes of passwords, refresh tokens, and one-time challenge tokens.
+- Uses KMS/HSM-backed signing and pepper material, overlapping key rotation, refresh-token rotation/reuse detection, rate limits, enumeration-resistant responses, and audited administrative controls.
+- Calls Account through an idempotent internal bootstrap contract to obtain the linked `account_id`; Account remains authoritative for profile, preferences, consent, and product lifecycle.
+- Does not own Artifacts, Notes, product authorization, Entitlements, or general product notification preferences.
+
 #### Public Edge API
 
-- Is the only public backend entry point for desktop/mobile and the web BFF.
-- Validates access tokens, applies coarse scopes/rate limits, propagates identity, and routes or composes calls.
+- Is the only public **product API** entry point for desktop/mobile and the web BFF; Auth Service is the separate public authentication-protocol boundary.
+- Validates first-party access-token signature, issuer, audience, expiry, scopes, session/security version, and key ID; applies coarse rate limits, propagates identity, and routes or composes calls.
 - Publishes the stable public OpenAPI contract used to generate the TypeScript client.
 - Exposes job SSE by reading the workflow service’s ordered event stream.
 - Contains no domain rules and owns no business database.
@@ -272,6 +288,7 @@ flowchart LR
 
 | Service/repository | Owns | Persistence | Key contracts |
 |---|---|---|---|
+| `auth-service` | End-user Identity, credentials, verification/recovery, Authentication Sessions, refresh-token families, token issuance/revocation, signing-key metadata and auth security audit | Auth database + KMS/Secrets Manager + ephemeral rate-limit cache | OIDC/OAuth endpoints, JWKS, session API, internal Account-bootstrap/deletion contracts |
 | `account-service` | User profile, preferences, consent, account-deletion request | Account database | Profile API; `AccountDeletionRequested`, `AccountPurged` |
 | `library-service` | Artifact aggregate, ownership, title, archive/trash state, current resource references | Library database | Artifact API; `ArtifactCreated`, `ArtifactMetadataChanged`, `ArtifactDeleted` |
 | `ingestion-service` | Source validation, upload sessions, provider adapters, media asset registry, retention deadlines | Ingestion database + quarantine/private S3 prefixes | Source/upload API and Temporal activities; `SourceAccepted`, `AssetReady`, `AssetDeleted` |
@@ -285,7 +302,7 @@ flowchart LR
 | `billing-service` | Subscriptions, entitlements, usage reservation/finalization, Stripe webhooks | Billing database | Billing/usage API and activities; `EntitlementChanged`, `UsageSettled` |
 | `notification-service` | In-app/email/push delivery preferences and delivery state | Notification database | Notification API; consumes user-facing domain events |
 
-The service count is a target boundary map, not a requirement to launch twelve teams. A small team may own several services, but the repositories, data access, deploys, and contracts remain independent.
+The service count is a target boundary map, not a requirement to launch fourteen teams. A small team may own several services, but the repositories, data access, deploys, and contracts remain independent.
 
 ### 5.3 Communication model
 
@@ -329,7 +346,7 @@ There is no application monorepo. Each deployable application or backend service
 | Repository | Published packages |
 |---|---|
 | `study-notes-creator-contracts` | `@study-notes/api-client`, public OpenAPI, internal API snapshots, event schemas, error/event types |
-| `study-notes-creator-frontend-foundation` | `@study-notes/domain`, `document-model`, `react-core`, `upload-core`, `telemetry`, `design-tokens`, shared TS/ESLint configs |
+| `study-notes-creator-frontend-foundation` | `@study-notes/domain`, `auth-core`, `document-model`, `react-core`, `upload-core`, `telemetry`, `design-tokens`, shared TS/ESLint configs |
 | `study-notes-creator-web-ui` | `@study-notes/web-ui`, `web-editor`, `web-player`; React DOM packages shared by Next.js and Electron |
 | `study-notes-creator-native-ui` | `@study-notes/native-ui`, `native-document`; React Native components and renderer, introduced with mobile |
 
@@ -339,6 +356,7 @@ There is no application monorepo. Each deployable application or backend service
 
 ```text
 study-notes-creator-edge-api
+study-notes-creator-auth-service
 study-notes-creator-account-service
 study-notes-creator-library-service
 study-notes-creator-ingestion-service
@@ -454,6 +472,7 @@ Use these reuse layers:
 | Layer | Package examples | Web | Electron | React Native |
 |---|---|---:|---:|---:|
 | Contracts and pure domain | `api-client`, `domain`, error types | Shared | Shared | Shared |
+| Authentication behavior | `auth-core` protocol/session types and platform ports | Shared through BFF adapter | Shared through system-browser/keychain adapter | Shared through system-browser/secure-storage adapter |
 | Document model | `document-model`, schema validation/migrations | Shared | Shared | Shared |
 | State machines and algorithms | upload state, merge logic, formatting, selectors | Shared | Shared | Shared |
 | Headless React logic | `react-core` query hooks, controllers, view-models | Shared | Shared | Shared when free of DOM APIs |
@@ -475,7 +494,7 @@ React Native Web is not the baseline for this product: the web study workspace d
 
 ```mermaid
 flowchart BT
-    CONTRACTS[api-client + event/error types] --> CORE[domain + document-model + upload-core]
+    CONTRACTS[api-client + event/error types] --> CORE[domain + auth-core + document-model + upload-core]
     CORE --> REACTCORE[react-core hooks/controllers/view-models]
     TOKENS[design-tokens] --> WEBUI[web-ui + web-editor + web-player]
     TOKENS --> NATIVEUI[native-ui + native-document]
@@ -503,6 +522,13 @@ Dependency arrows point toward consumers. Application repositories sit at the to
 
 - Branded IDs, date/duration helpers, generation settings, status mapping, entitlement display types, and pure invariants needed by clients.
 - Contains no server-only business decisions and no UI framework imports.
+
+**`@study-notes/auth-core`**
+
+- Shared Auth issuer/client configuration types, coarse scope/session view models, login/logout/revoke state machines, and platform ports.
+- Uses an approved maintained OAuth/OIDC client implementation and an injected cryptographic/randomness adapter; it does not implement protocol cryptography itself.
+- Does not persist credentials, render the hosted sign-in UI, import application shells, or choose web/native secure storage.
+- Web implements the port in the BFF; Electron and React Native use system-browser callbacks and OS secure storage.
 
 **`@study-notes/document-model`**
 
@@ -557,7 +583,7 @@ Example implementations:
 
 | Port | Web | Electron | Mobile |
 |---|---|---|---|
-| Auth | BFF session cookie | System browser PKCE + OS keychain | Expo/system browser PKCE + secure storage |
+| Auth | First-party Auth Service + BFF session cookie | First-party Auth Service via system browser PKCE + OS keychain | First-party Auth Service via Expo/system browser PKCE + secure storage |
 | Files | Browser file input/File System Access when available | Typed preload IPC and native dialog | Document/photo picker |
 | Uploads | Browser multipart + IndexedDB checkpoint | Utility-process multipart + local checkpoint | Native background upload task |
 | Local state | IndexedDB for non-secret recovery state | Encrypted SQLite | Local database |
@@ -663,10 +689,10 @@ Citations seek to `start_ms` and highlight the associated transcript span. Playb
 The desktop app is implemented in its own repository after the web product is stable. It packages a local renderer rather than loading the production website as privileged remote content.
 
 - Electron main, preload, and renderer code use TypeScript.
-- The renderer consumes published `api-client`, `domain`, `document-model`, `react-core`, `design-tokens`, `web-ui`, `web-editor`, and `web-player` packages.
+- The renderer consumes published `api-client`, `domain`, `auth-core`, `document-model`, `react-core`, `design-tokens`, `web-ui`, `web-editor`, and `web-player` packages.
 - Electron-specific shell code is built with a dedicated renderer toolchain; it does not require a local Next.js server.
 - The repository pins package versions and upgrades them through tested dependency pull requests; it never imports source directly from the web repository.
-- Authentication uses the system browser and OIDC Authorization Code + PKCE, returning through a validated custom protocol or loopback callback.
+- Authentication uses the system browser and the first-party Auth Service's OIDC Authorization Code + PKCE flow, returning through a validated claimed HTTPS link, custom protocol, or loopback callback as approved per platform.
 - Refresh credentials are stored in the OS keychain.
 - `nodeIntegration` is disabled, context isolation and sandboxing are enabled, and a strict CSP is applied.
 - Preload exposes a minimal typed API; all IPC inputs and sender origins are validated.
@@ -678,9 +704,9 @@ The desktop app is implemented in its own repository after the web product is st
 ### 8.2 React Native mobile phase
 
 - Build the mobile app in its own repository using React Native, Expo, and TypeScript.
-- Consume published `api-client`, `domain`, `document-model`, `react-core`, `upload-core`, `telemetry`, `design-tokens`, and native UI packages.
+- Consume published `api-client`, `domain`, `auth-core`, `document-model`, `react-core`, `upload-core`, `telemetry`, `design-tokens`, and native UI packages.
 - Build native UI rather than attempting to share DOM components.
-- Authentication uses system-browser OIDC with PKCE; credentials use platform secure storage.
+- Authentication uses the first-party Auth Service through system-browser OIDC with PKCE; refresh credentials use platform secure storage.
 - Native background upload support is required before advertising uploads that continue after app termination.
 - Initial mobile editing may be block-limited; the full web editor is not placed in a WebView unless a separate security and UX review approves it.
 - Read rendering consumes the same versioned Tiptap JSON through a native renderer or a validated intermediate representation.
@@ -763,6 +789,24 @@ Edge API exposes these paths while routing to or composing from the listed owner
 | `GET /v1/me` | Account | Current user and preferences |
 | `DELETE /v1/me` | Workflow + Account | Start account deletion saga |
 
+Auth Service is exposed on a dedicated first-party authentication origin. These protocol/security routes are not part of Edge's product `/v1` API:
+
+| Method and path | Owner | Purpose |
+|---|---|---|
+| `GET /.well-known/openid-configuration` | Auth | OIDC discovery metadata |
+| `GET /.well-known/jwks.json` | Auth | Current and overlapping public signing keys |
+| `GET /oauth/authorize` | Auth | Authorization Code + PKCE authorization endpoint and hosted sign-in/registration UI |
+| `POST /oauth/token` | Auth | Authorization-code exchange and rotating refresh-token grant |
+| `POST /oauth/revoke` | Auth | Revoke refresh-token family/session |
+| `POST /auth/register` | Auth | Create an Identity and start email verification without leaking existing-account state |
+| `POST /auth/verify-email` | Auth | Consume a single-use verification challenge |
+| `POST /auth/recovery/request` | Auth | Start enumeration-resistant access recovery |
+| `POST /auth/recovery/complete` | Auth | Consume a single-use recovery challenge and revoke prior sessions |
+| `GET /auth/sessions` | Auth | List the Actor's active Authentication Sessions |
+| `DELETE /auth/sessions/{id}` | Auth | Revoke one Authentication Session/token family |
+
+Credential submission and refresh-token rotation go directly to Auth Service over TLS; Edge and domain Services never receive a password or refresh token.
+
 ### 9.3 Idempotency
 
 - The owning command service stores a hash of user, operation, idempotency key, and normalized request body in its database; Edge forwards the key unchanged.
@@ -778,25 +822,57 @@ Edge API exposes these paths while routing to or composing from the listed owner
 
 ## 10. Authentication and authorization
 
-### 10.1 Authentication flows
+### 10.1 Identity and Account boundary
+
+- Auth Service owns the security principal (`identity_id`), login identifiers, credentials, verification/recovery, Authentication Sessions, token families, token issuance/revocation, signing keys, and authentication security audit.
+- Account Service owns `account_id`, profile, product preferences, consent, and product Account deletion request/state.
+- One Auth Identity initially maps to one Account. Account owns the canonical `identity_id` → `account_id` relationship; Auth stores the returned `account_id` as a minimal token-claim projection.
+- After email verification, Auth calls Account's idempotent private `CreateAccountForIdentity` Command. Until this succeeds, the Identity is `pending_account` and cannot obtain normal product scopes.
+- Repair/reconciliation retries Account bootstrap by `identity_id` without creating duplicate Accounts.
+- Deleting an Account immediately revokes Auth Sessions, then the Deletion Saga purges both Services under their own retention policies.
+
+### 10.2 Authentication flows
 
 **Web:**
 
-1. Next.js redirects to managed OIDC Universal Login.
-2. Authorization Code + PKCE completes at the BFF.
-3. The BFF stores an encrypted, rotating session in `Secure`, `HttpOnly`, `SameSite=Lax` cookies.
-4. The BFF obtains a short-lived audience-bound access token and calls Edge API.
-5. Browser JavaScript never receives refresh tokens.
+1. Next.js redirects to the first-party Auth Service's `/oauth/authorize` endpoint using Authorization Code + PKCE, state, nonce, and an exact registered redirect URI.
+2. Auth renders its own registration/sign-in/verification/recovery UI and never sends credentials through Edge or the web application.
+3. The authorization code is short-lived, one-time, client-bound, redirect-bound, and exchanged by the BFF.
+4. The BFF stores only an opaque/encrypted rotating web-session reference in `Secure`, `HttpOnly`, `SameSite=Lax` cookies; server-side session material/refresh tokens are inaccessible to browser JavaScript.
+5. The BFF obtains a short-lived audience-bound access token and calls Edge API.
 
 **Desktop/mobile:**
 
-1. Client uses the system browser and Authorization Code + PKCE.
-2. Edge API accepts a short-lived bearer access token with the same issuer/audience.
-3. Refresh credentials live only in OS secure storage.
+1. The client opens the first-party Auth Service in the system browser using Authorization Code + PKCE, state, nonce, and a platform-approved redirect.
+2. Auth returns a one-time code through a claimed HTTPS/universal link or another reviewed callback mechanism.
+3. The client exchanges the code directly with Auth Service.
+4. Rotating refresh credentials live only in OS secure storage; access tokens remain in memory where practical.
+5. Edge accepts the same short-lived issuer/audience-bound access-token format as web.
 
-### 10.2 Authorization
+**Access token:**
 
-- Every user-owned aggregate includes `owner_user_id`; future team-owned aggregates additionally include `workspace_id`.
+- Signed JWT with `sub=identity_id`, `account_id`, audience, issuer, scopes, `session_id`/security version, issued/expiry time, unique `jti`, and key ID.
+- Contains no email, display name, password state, private content, Entitlement ledger, or unnecessary profile data.
+- Edge validates locally from cached Auth JWKS. Resource Services receive a signed short-lived internal Actor context and still authorize the resource.
+
+### 10.3 Credential, token, and session security
+
+- Password credentials are processed only by Auth. Password hashes use Argon2id with per-credential salt and benchmarked memory/time parameters; pepper material is versioned in KMS/Secrets Manager, never the Auth database.
+- Use mature, actively maintained OAuth/OIDC, JOSE/JWT, WebAuthn, password-hashing, and constant-time cryptographic libraries. Do not design custom cryptographic primitives or hand-roll protocol parsing.
+- Registration, sign-in, verification, and recovery responses are enumeration-resistant and protected by WAF, per-IP/identifier/device throttles, progressive delay, bot controls, and security telemetry.
+- Verification/recovery codes are cryptographically random, stored only as keyed hashes, purpose/audience bound, single use, short lived, and invalidated on successful use or superseding request.
+- Refresh tokens are opaque, high-entropy, one-time rotating tokens stored only as hashes. Reuse revokes the token family, raises a security audit event, and requires reauthentication.
+- Access tokens are deliberately short lived. Logout/revocation blocks refresh immediately; high-risk Account/Billing/security operations may require a private Auth session-status check so they do not rely only on JWT expiry.
+- Signing private keys remain in KMS/HSM-backed custody. JWKS publishes current/overlapping public keys; rotation preserves validation through the maximum issued-token lifetime and supports emergency revocation.
+- Auth Sessions record bounded device/user-agent/IP security metadata under the approved retention policy. Users can list and revoke sessions without exposing token material.
+- Password changes/recovery revoke older token families. Sensitive security changes require recent authentication and, where enabled, MFA.
+- Auth owns passkey/WebAuthn and MFA credential records when introduced. Initial launch method scope and MFA requirements are decided in ADR-009; no external identity provider becomes authoritative.
+- Transactional verification/recovery/security email may use an external delivery provider, but Auth owns challenge state, message intent, security policy, and verification result. The provider is only a delivery processor.
+- Social/federated login is outside the initial scope. If added later, first-party Auth remains issuer and broker; the external identity is not exposed as the product Account.
+
+### 10.4 Authorization
+
+- Every user-owned aggregate includes `owner_account_id`; future team-owned aggregates additionally include `workspace_id`.
 - Edge validates the user token, but each domain service independently authorizes the propagated actor and requested resource. Edge authentication is not sufficient authorization.
 - Service-to-service requests use workload identity through ECS/IAM and mTLS where configured. The signed internal identity includes caller service, original actor, scopes, trace ID, and a short expiry.
 - PostgreSQL row-level security is enabled on high-risk user-content databases where it improves defense in depth; policies and roles are local to the owning service.
@@ -1170,6 +1246,7 @@ Provenance is presentation metadata, not a security boundary. Notes service vali
 
 | Service database | Core tables/projections |
 |---|---|
+| Auth | `identities`, `login_identifiers`, `password_credentials`, `verification_challenges`, `recovery_challenges`, `authentication_sessions`, `refresh_token_families`, `authenticators`, `signing_key_metadata`, `auth_security_events`, local outbox/processed events |
 | Account | `users`, `user_preferences`, `consents`, `account_deletion_requests`, local `outbox_events`/`processed_events` |
 | Library | `artifacts`, `artifact_resource_refs`, `trash_records`, artifact status/read projection, local outbox/processed events |
 | Ingestion | `sources`, `media_assets`, `upload_sessions`, `retention_tasks`, provider metadata, local outbox/processed events |
@@ -1277,7 +1354,7 @@ Deletion workflow:
 1. Immediately revoke shares, playback/download URLs, and active jobs.
 2. Hide the artifact from normal reads.
 3. During the recovery window, retain only data described to the user.
-4. Workflow service runs a deletion saga. It sends idempotent purge Activities to Library, Ingestion, Media, Transcription, AI Notes, Notes, Search, Export, Billing where applicable, and Notification.
+4. Workflow service runs a deletion saga. It first revokes Auth Sessions, then sends idempotent purge Activities to Auth, Account, Library, Ingestion, Media, Transcription, AI Notes, Notes, Search, Export, Billing where applicable, and Notification.
 5. Each owning service deletes its data, local cache, and objects, records a content-free tombstone, and returns a signed/traceable acknowledgement.
 6. Workflow service marks purge complete only after all required acknowledgements; missing acknowledgements retry and alert past the deadline.
 7. Each service’s backups expire through their normal window; a restored database reconciles against the workflow-service deletion ledger/tombstone events before that service becomes ready.
@@ -1318,7 +1395,7 @@ Treat all of the following as untrusted:
 - Webhook signature and timestamp verification before enqueueing work.
 - Dependency, container, IaC, secret, and license scanning in CI.
 - Signed build provenance and software bill of materials for release images.
-- Production administrative access uses SSO, MFA, short sessions, and audit logging.
+- Production administrative access uses a separate workforce identity/SSO boundary, MFA, short sessions, and audit logging; end-user Auth is not reused for cloud break-glass access.
 - No production content copied to development or AI evaluation datasets.
 
 ### 20.3 Privacy in telemetry
@@ -1353,6 +1430,7 @@ Automated log-redaction tests use seeded secrets and private sample text to dete
 - CloudFront for edge TLS, static assets, and path routing.
 - AWS WAF for edge protections.
 - Application Load Balancer to ECS/Fargate web and API services in private subnets.
+- A dedicated public Auth origin/listener with WAF rules isolated from Edge product APIs; only protocol/UI endpoints are public, while Auth administration and Service contracts remain private.
 - A separate ECS/Fargate service and deployment definition for Edge API and every backend API/worker pool.
 - ECS Service Connect for private discovery, connectivity, traffic metrics, and service-level routing.
 - Amazon EventBridge custom bus with an SQS queue and DLQ per asynchronous consumer.
@@ -1361,7 +1439,7 @@ Automated log-redaction tests use seeded secrets and private sample text to dete
 - S3 buckets/prefixes separated by quarantine, private derived content, and exports.
 - Temporal Cloud connected using mTLS/API credentials stored in Secrets Manager.
 - SES or equivalent adapter for email.
-- KMS for service encryption keys.
+- KMS for service encryption keys plus Auth signing and credential-pepper key versions; Auth workloads receive narrowly scoped cryptographic permissions and cannot export private key material.
 - OpenTelemetry Collector feeding managed metrics, logs, and traces.
 
 The first release uses one region selected from user geography, data-residency needs, provider availability, and latency tests. Multi-AZ is required; multi-region is deferred.
@@ -1472,7 +1550,7 @@ Initial targets; validate during private beta:
 
 | Measure | Target |
 |---|---|
-| Web/Edge API availability | 99.9% monthly, excluding declared maintenance |
+| Web/Auth/Edge API availability | 99.9% monthly, excluding declared maintenance |
 | Authenticated CRUD API latency | p95 < 400 ms server time, excluding external-provider work |
 | Existing note load | p75 LCP < 2.5 s on supported broadband/mobile profiles |
 | Editor interaction | p75 INP < 200 ms |
@@ -1499,6 +1577,7 @@ The generation latency target is segmented by duration, source type, language, a
 **Unit tests**
 
 - Domain policies, entitlement math, state transitions, URL checks, document conversion, and citation validation.
+- Auth identifier normalization, Argon2id/pepper-version handling, challenge/token-family state machines, expiry, revocation, reuse detection, and claim construction.
 - Provider adapters with recorded/synthetic responses.
 - Prompt response schema parsing and failure classification.
 
@@ -1518,6 +1597,7 @@ The generation latency target is segmented by duration, source type, language, a
 **Integration tests**
 
 - Each service’s PostgreSQL repositories/RLS, outbox publisher, processed-event logic, S3 usage, and cache recovery in isolation.
+- Auth registration/verification/recovery, idempotent Account bootstrap, Authorization Code + PKCE, JWKS overlap/rotation, refresh-token family reuse, session revocation, and email-delivery failure using non-production fixtures.
 - EventBridge/SQS integration, DLQ/redrive, projection rebuild, and cross-service deletion saga in an integrated environment.
 - Real FFmpeg against a small synthetic codec corpus inside production-like containers.
 
@@ -1527,15 +1607,15 @@ The generation latency target is segmented by duration, source type, language, a
 
 **End-to-end tests**
 
-- Sign-in, upload, generation with deterministic fake AI/ASR, progress reconnect, note editing, conflict, export, share, billing sandbox, and deletion.
+- Registration, verification, sign-in, recovery, session revoke, upload, generation with deterministic fake AI/ASR, progress reconnect, note editing, conflict, export, share, billing sandbox, and deletion.
 
 **Security tests**
 
-- SSRF corpus, decompression/media bombs, malformed containers, XSS/Markdown payloads, prompt injection, authz isolation, share enumeration, signed-URL scope, and secret-redaction tests.
+- OAuth/OIDC conformance, PKCE/state/nonce, exact redirect matching, account enumeration, credential stuffing/rate limits, token substitution/replay/reuse, algorithm confusion, key rotation, session fixation/revocation, recovery abuse, CSRF, SSRF corpus, decompression/media bombs, malformed containers, XSS/Markdown payloads, prompt injection, authz isolation, share enumeration, signed-URL scope, and secret-redaction tests.
 
 **Performance tests**
 
-- Concurrent upload-session creation, direct multipart upload, library/search, SSE connections, editor save, workflow submission, and queue backlog recovery.
+- Concurrent registration/sign-in/token refresh with abuse limits, upload-session creation, direct multipart upload, library/search, SSE connections, editor save, workflow submission, and queue backlog recovery.
 
 ### 24.2 AI evaluation pipeline
 
@@ -1638,7 +1718,7 @@ Every repository runs formatting, linting, static type checking, unit tests, dep
 - Establish repository ownership, service catalog, public/internal contracts, event envelope, private package registry, and release/version policy.
 - Prove one end-to-end cross-service slice: Edge → Library → outbox → EventBridge/SQS → Search projection.
 - Prove a Temporal saga whose Activities are implemented and deployed from separate service repositories, including compensation and contract-version upgrade.
-- Publish `api-client`, `domain`, `document-model`, `react-core`, `design-tokens`, and `web-ui` canaries and consume them from separate web and Electron fixture repositories.
+- Publish `api-client`, `domain`, `auth-core`, `document-model`, `react-core`, `design-tokens`, and `web-ui` canaries and consume them from separate web and Electron fixture repositories.
 - Validate rights-compliant YouTube and hosted-source paths.
 - Benchmark at least two ASR and two text-model configurations on a permissioned corpus.
 - Prove timestamp evidence pipeline from transcript segment to player seek.
@@ -1676,7 +1756,7 @@ Exit: PRD private-beta metrics and TRD SLOs are met on real invited-user workloa
 
 ### Phase 4: Electron desktop
 
-- Consume and verify the already published shared client packages, then add the local renderer, secure OIDC/IPC, file workflow, and signed updates.
+- Consume and verify the already published shared client packages, then add the local renderer, secure first-party OIDC/IPC, file workflow, and signed updates.
 - Add optional background uploads and offline reading after the online desktop flow is stable.
 
 ### Phase 5: React Native mobile
@@ -1688,7 +1768,7 @@ Exit: PRD private-beta metrics and TRD SLOs are met on real invited-user workloa
 
 ## 28. Technical acceptance criteria for web MVP
 
-1. Web, Edge API, every domain service, and worker pool deploy independently and reproducibly from its versioned artifact and Terraform composition.
+1. Web, Auth, Edge API, every domain service, and worker pool deploy independently and reproducibly from its versioned artifact and Terraform composition.
 2. Browser uploads a 5 GB supported file directly with multipart resume; application servers never proxy the bytes.
 3. URL fetchers cannot access private/reserved networks and pass the SSRF test corpus.
 4. Accepted generation survives Edge/domain-service, worker, and deployment restarts and resumes from durable state.
@@ -1711,6 +1791,7 @@ Exit: PRD private-beta metrics and TRD SLOs are met on real invited-user workloa
 21. No service reads another service’s database; automated IAM/network/credential tests enforce the boundary.
 22. Event consumers tolerate duplicate delivery, recover from DLQ/redrive, and rebuild projections from owner-service snapshots/events.
 23. Web and Electron share React DOM feature packages; mobile fixture validates shared pure/headless packages without importing DOM code.
+24. First-party Auth passes protocol/security review: credentials/challenges/tokens never leak, Account bootstrap is idempotent, redirect/PKCE rules hold, refresh reuse revokes the family, session revocation works, and signing-key rotation preserves only the intended validation window.
 
 ---
 
@@ -1724,7 +1805,7 @@ Create short ADRs alongside implementation for:
 4. Temporal cross-service saga and Activity contract/version policy.
 5. Polyrepo topology, private package registry, and frontend reuse boundaries.
 6. Tiptap-compatible canonical document and schema migration policy.
-7. OIDC provider, web BFF session, and service workload identity.
+7. First-party Auth Service, credential/session/token model, key rotation, web BFF session, and Service workload identity.
 8. ASR provider and fallback policy by language.
 9. Text-model routing and evaluation thresholds.
 10. YouTube/hosted-source compliant acquisition paths.
@@ -1751,7 +1832,7 @@ The architecture can proceed, but these inputs must be resolved before the named
 | Billing unit and plan limits | Paid beta | Product + finance + engineering |
 | Retention defaults and support-elevation policy | Internal alpha | Privacy + security + product |
 | Maximum duration/file size confirmation | Private beta | Product + platform |
-| Managed OIDC vendor | Authentication implementation | Security + platform |
+| Password/identifier policy, email-delivery processor, session/token lifetimes, MFA launch scope, Argon2id benchmark, and KMS/JWKS rotation | Auth implementation | Security + platform |
 | Private npm/Python registry and package-signing policy | Shared package bootstrap | Platform + security |
 | Named owner and on-call path for every service/repository | Before internal alpha | Engineering leadership |
 | Supported desktop/mobile API compatibility window | Before first native client | Product + engineering |
